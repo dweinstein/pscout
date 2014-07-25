@@ -268,7 +268,7 @@ foreach (@providers) {
 			foreach (keys %pathtype) {
 				$path = $_;
 				foreach (@authorities) {
-					print "contents://".$_.$path." R ".$writeperm." ".$pathtype{$path}."\n";
+					print "contents://".$_.$path." W ".$writeperm." ".$pathtype{$path}."\n";
 				}
 			}
 		}
