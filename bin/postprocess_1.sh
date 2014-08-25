@@ -22,5 +22,7 @@ echo Generating content provider checks...
 echo Identifying intents with dynamic permission...
 ../bin/intentwithpermission.sh
 ../bin/analyzeintent.pl > intentwithdynamicpermission
+# Next line added manually per the README
+cat intentpermission intentwithdynamicpermission > intentpermissions
 
 echo "Please run ../bin/intentpermissioncheck.sh"

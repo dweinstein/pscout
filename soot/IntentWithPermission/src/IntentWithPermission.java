@@ -2,8 +2,10 @@ import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 
 import soot.Body;
 import soot.Scene;
@@ -76,7 +78,7 @@ public class IntentWithPermission {
     	try {
 			Body b = m.retrieveActiveBody();
 			Iterator<Unit> iter_u = b.getUnits().iterator();
-			HashMap<String, String> intentaction = new HashMap<String,String>();
+			HashMap<String, List<String>> intentaction = new HashMap<String, List<String>>();
 			
 			while (iter_u.hasNext()) {
 				Stmt u = (Stmt) iter_u.next();
@@ -84,15 +86,27 @@ public class IntentWithPermission {
 					DefinitionStmt d = (DefinitionStmt) u;
 					if (d.getRightOp() instanceof NewExpr) {
 						String newbasestr = ((NewExpr)d.getRightOp()).getBaseType().toString();
-						if(newbasestr.equals("android.content.Intent")) {
-							intentaction.put(d.getLeftOp().toString(), "undefined");
-							//print (d.getLeftOp().toString()+":undefined");
-						}
-					} else if (intentaction.get(d.getRightOp().toString()) != null) {
-						intentaction.put(d.getLeftOp().toString(), intentaction.get(d.getRightOp().toString()));
-						//print(d.getLeftOp().toString()+":"+intentaction.get(d.getRightOp().toString()));
-					} 
-				}
+						if (newbasestr.equals("android.content.Intent")) {
+                            // Found a new intent definition of form intentVar =
+                            // new Intent();
+                            if (!intentaction.containsKey(d.getLeftOp()
+                                    .toString())) {
+                                intentaction.put(d.getLeftOp().toString(),
+                                        new ArrayList<String>());
+                            }
+                        }
+                    } else if (intentaction.containsKey(d.getRightOp()
+                            .toString())) {
+                        // Found an intent assignment of form intentVar1 =
+                        // intentVar2;
+                        String alias = d.getLeftOp().toString();
+                        if (!intentaction.containsKey(alias)) {
+                            intentaction.put(alias, new ArrayList<String>());
+                        }
+                        intentaction.get(alias).addAll(intentaction.get(d.getRightOp().toString()));
+                    }
+                }
+
 				if (!u.containsInvokeExpr()) continue;
 				InvokeExpr i = u.getInvokeExpr();
 				SootMethod invokemethod = i.getMethod();
@@ -102,7 +116,8 @@ public class IntentWithPermission {
 						if(invokemethod.getName().equals("<init>") 
 								&& invokemethod.getParameterCount() > 0
 								&& invokemethod.getParameterType(0).toString().equals("java.lang.String")) {
-							intentaction.put(ii.getBase().toString(), ii.getArg(0).toString());
+							// Found an action string passed to the Intent() constructor
+						    intentaction.get(ii.getBase().toString()).add(ii.getArg(0).toString());
 							//print (ii.getBase().toString()+":"+ii.getArg(0).toString());
 						}
 					} else if (invokemethod.getDeclaringClass().toString().startsWith("android.content.Context")
@@ -113,14 +128,15 @@ public class IntentWithPermission {
 						boolean foundintent = false;
 						boolean foundpermission = false;
 						boolean isSenderPerm = invokemethod.getName().equals("registerReceiver");
-						String perm = "", intent = "";
+						String perm = "";
+						List<String> intentList = new ArrayList<String>();
 						while(iter_vb.hasNext()) {
 							Value v = iter_vb.next().getValue();
 							
 							//look for usage of stored intents
 							if (intentaction.get(v.toString()) != null) {
 								foundintent = true;
-								intent = intentaction.get(v.toString());
+								intentList = intentaction.get(v.toString());
 							}
 							
 							int j=0;
@@ -133,26 +149,29 @@ public class IntentWithPermission {
         					}
 						}
 						if (foundintent && foundpermission) {
-							String direction = (isSenderPerm) ? "S" : "R";
-							if (intent.length()<5) {
-								print ("!!!"+intent+" "+perm+" "+direction+" "+m.toString());
-							} else {
-								intent = intent.substring(1, intent.length()-1);
-								print (intent+" "+perm+" "+direction);								
-							}
+						    for (String intent : intentList){
+    							String direction = (isSenderPerm) ? "S" : "R";
+    							if (intent.length()<5) {
+    								print ("!!!"+intent+" "+perm+" "+direction+" "+m.toString());
+    							} else {
+    								intent = intent.substring(1, intent.length()-1);
+    								print (intent+" "+perm+" "+direction);								
+    							}
+    						}
 						}
 					} else {
 						Iterator<ValueBox> iter_vb = u.getUseBoxes().iterator();
 						boolean foundintent = false;
 						boolean foundpermission = false;
-						String perm = "", intent = "";
+						String perm = "";
+						List<String> intentList = new ArrayList<String>();
 						while(iter_vb.hasNext()) {
 							Value v = iter_vb.next().getValue();
 							
 							//look for usage of stored intents
 							if (intentaction.get(v.toString()) != null) {
 								foundintent = true;
-								intent = intentaction.get(v.toString());
+								intentList = intentaction.get(v.toString());
 							}
 							
 							int j=0;
@@ -165,8 +184,10 @@ public class IntentWithPermission {
         					}
 						}
 						if (foundintent && foundpermission) {
-							print ("!!!"+intent+" "+perm+" "+invokemethod.toString());
-						}				
+						    for (String intent: intentList){
+    							print ("!!!"+intent+" "+perm+" "+invokemethod.toString());
+    						}
+						}
 					}
 				}
 			}
